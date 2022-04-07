@@ -1,45 +1,94 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, SafeAreaView, ScrollView } from 'react-native';
-import { CLEAR, colors, ENTER } from './src/constants'
+import { StyleSheet, Text, View, SafeAreaView, ScrollView, Alert } from 'react-native';
+import { CLEAR, colors, colorsToEmoji, ENTER } from './src/constants'
 import Keyboard from './src/components/Keyboard';
+import * as Clipboard  from 'expo-clipboard'
+import { wordList } from './constant';
 
 const NUMBER_OF_TRIES = 6;
+
+const getDayOfTheYear = () => {
+   const now = new Date();
+   const start = new Date(now.getFullYear(), 0, 0);
+   const diff = now - start;
+   const oneDay = 1000*60*60*24
+   const day = Math.floor(diff /oneDay);
+   return day
+}
+
+
+const dayOfTheYear = getDayOfTheYear()
+const words = wordList;
+
 
 export default function App() {
 
   
 
-  const word = "hello";
+  const word = words[dayOfTheYear];
   const letters = word.split('')
 
   const [rows, setRows] = useState(new Array(NUMBER_OF_TRIES).fill(new Array(letters.length).fill("")))
   const [curRow, setCurRow] = useState(0);
   const [curCol , setCurCol] = useState(0);
+  const [gameState ,setGameState] = useState('playing') // won, lost, playing
+  useEffect(() => {
+    if(curRow > 0) {
+      checkGameState()
+    }
+  }, [curRow])
 
+  const checkGameState = () => {
+    if(checkIfWon() && gameState !== 'won') {
+      Alert.alert("Hurray", "You won", [{'text': 'Share', onPress: shareScore}]);
+      setGameState('won')
+    } else if(checkIfLost() && gameState !== 'lost') {
+      Alert.alert("Mah!", "Try again tomorrow")
+      setGameState('lost')
+    }
+  }
+
+  const shareScore = () => {
+    const textShare = rows.map((row, i) => row.map((cell, j) => colorsToEmoji[getCellBGColor(i, j)]).join("")).filter(row => row).join('\n')
+    console.log(textShare)
+    Clipboard.setString(textShare)
+    Alert.alert("Score copied succesfully")
+  }
+
+  const checkIfWon = () => {
+    const row = rows[curRow -1];
+    return row.every((letter, i) =>  letter === letters[i])
+  }
+  const checkIfLost = () => {
+    return  !checkIfWon() && curRow === rows.length
+  }
   const onKeyPressed = (key) => {
-    const updatedRow = copyArray(rows)
-    if(key === CLEAR) {
-      const prevCol= curCol - 1
-      if(prevCol >= 0) {
-        updatedRow[curRow][prevCol] = "";
+    if(gameState === 'playing') {
+      const updatedRow = copyArray(rows)
+      if(key === CLEAR) {
+        const prevCol= curCol - 1
+        if(prevCol >= 0) {
+          updatedRow[curRow][prevCol] = "";
+          setRows(updatedRow)
+          setCurCol(prevCol)
+        }
+        return;
+      }
+      if( key === ENTER) {
+        if(curCol === rows[0].length) {
+          setCurRow(curRow+1)
+          setCurCol(0)
+        }
+        return;
+      }
+      if(curCol < rows[0].length) {
+        updatedRow[curRow][curCol] = key
         setRows(updatedRow)
-        setCurCol(prevCol)
+        setCurCol(curCol+1)
       }
-      return;
     }
-    if( key === ENTER) {
-      if(curCol === rows[0].length) {
-        setCurRow(curRow+1)
-        setCurCol(0)
-      }
-      return;
-    }
-    if(curCol < rows[0].length) {
-      updatedRow[curRow][curCol] = key
-      setRows(updatedRow)
-      setCurCol(curCol+1)
-    }
+    
   }
 
   const copyArray = (arr) => {
@@ -51,7 +100,7 @@ export default function App() {
   }
 
   const getCellBGColor = (row, column) => {
-    const letter = rows[curRow][curCol]
+    const letter = rows[row][column]
     if(row >= curRow) {
       return colors.black
     }
@@ -64,8 +113,17 @@ export default function App() {
     return colors.darkgrey
   }
 
-  const greenCaps = rows.map((row, i) =>  row.map((cell, j) => getCellBGColor(i, j) ) )
- 
+  const getAllLettersWithColor = (color) => {
+    return rows.flatMap((row, i) => 
+      row.filter((cell, j) => getCellBGColor(i, j) === color
+    ))
+  }
+
+  const greenCaps = getAllLettersWithColor(colors.primary)
+
+  const yelloCaps = getAllLettersWithColor(colors.secondary)
+  const greyCaps = getAllLettersWithColor(colors.darkgrey)
+
   return (
     <SafeAreaView style={styles.container}>
       
@@ -88,7 +146,7 @@ export default function App() {
         </View>  
         ))}
       </ScrollView>
-      <Keyboard onKeyPressed={onKeyPressed} greenCaps={greenCaps} yellowCaps={['c', 'd']}/>
+      <Keyboard onKeyPressed={onKeyPressed} greenCaps={greenCaps} yellowCaps={yelloCaps} greyCaps={greyCaps}/>
     </SafeAreaView>
   );
 }
@@ -107,9 +165,7 @@ const styles = StyleSheet.create({
   },
   map:{
     alignSelf: 'stretch',
-    height: 100,
-    marginTop: 20
-    
+    marginTop: 20,
   },
   row: {
     alignSelf: 'stretch',
